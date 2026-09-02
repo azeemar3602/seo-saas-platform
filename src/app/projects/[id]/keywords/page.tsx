@@ -3,7 +3,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { RankDistributionChart } from "@/components/charts/RankDistributionChart";
 import { Sparkline } from "@/components/charts/Sparkline";
-import { getProject, getKeywords, getRankDistribution } from "@/lib/mock-data";
+import { getProject, getKeywords, getRankDistribution, getKeywordOpportunity } from "@/lib/mock-data";
 import { formatNumber, formatCurrency } from "@/lib/utils";
 import { ArrowUp, ArrowDown, Minus, Sparkles } from "lucide-react";
 
@@ -21,6 +21,7 @@ export default async function KeywordsPage({ params }: { params: Promise<{ id: s
 
   const keywords = getKeywords(id).sort((a, b) => a.position - b.position);
   const distribution = getRankDistribution(id);
+  const opportunity = getKeywordOpportunity(id);
 
   return (
     <div className="space-y-4">
@@ -35,9 +36,11 @@ export default async function KeywordsPage({ params }: { params: Promise<{ id: s
           <p className="text-xs font-medium text-muted">Keyword opportunity</p>
           <div className="flex items-center gap-2 mt-2">
             <Sparkles className="w-4 h-4 text-primary" />
-            <p className="text-sm font-semibold">modular sofa small space</p>
+            <p className="text-sm font-semibold">{opportunity.keyword}</p>
           </div>
-          <p className="text-xs text-muted mt-1">2,900 vol · KD 24 · currently unranked</p>
+          <p className="text-xs text-muted mt-1">
+            {formatNumber(opportunity.volume)} vol · KD {opportunity.difficulty} · currently unranked
+          </p>
           <button className="mt-4 w-full bg-primary-soft text-primary text-sm font-semibold py-2 rounded-lg hover:bg-primary hover:text-white transition-colors">
             Add to tracking
           </button>

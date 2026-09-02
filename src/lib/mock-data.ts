@@ -219,8 +219,7 @@ export function getAuditCategories(projectId: string): AuditCategory[] {
   ];
 }
 
-export function getAuditIssues(projectId: string): AuditIssue[] {
-  return [
+const auditIssuePool: AuditIssue[] = [
     {
       id: "i1",
       category: "Performance & Core Web Vitals",
@@ -299,7 +298,19 @@ export function getAuditIssues(projectId: string): AuditIssue[] {
       affectedUrls: 12,
       howToFix: "Write descriptive, keyword-relevant alt text for each product image (not keyword-stuffed).",
     },
+];
+
+export function getAuditIssues(projectId: string): AuditIssue[] {
+  const seed = projectId.length;
+  const rotated = [
+    ...auditIssuePool.slice(seed % auditIssuePool.length),
+    ...auditIssuePool.slice(0, seed % auditIssuePool.length),
   ];
+  const keep = seed % 3 === 0 ? rotated.slice(0, -1) : rotated;
+  return keep.map((issue, i) => ({
+    ...issue,
+    affectedUrls: Math.max(1, issue.affectedUrls + (((seed + i) * 3) % 5) - 2),
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -352,6 +363,23 @@ export function getKeywords(projectId: string): Keyword[] {
       aiOverview: seed % 3 === 0,
     };
   });
+}
+
+const opportunityKeywords: Record<string, { keyword: string; volume: number; difficulty: number }> = {
+  rapidflow: { keyword: "tankless water heater installation near me", volume: 1900, difficulty: 28 },
+  soulofscents: { keyword: "best smelling wax melts", volume: 2400, difficulty: 21 },
+  yozo: { keyword: "modular sofa small space", volume: 2900, difficulty: 24 },
+  bralim: { keyword: "organic lavender essential oil benefits", volume: 1600, difficulty: 19 },
+};
+
+export function getKeywordOpportunity(projectId: string) {
+  return (
+    opportunityKeywords[projectId] ?? {
+      keyword: "long-tail keyword for your niche",
+      volume: 1200,
+      difficulty: 22,
+    }
+  );
 }
 
 export function getRankDistribution(projectId: string) {
@@ -408,7 +436,7 @@ export function getBacklinks(projectId: string): Backlink[] {
       anchorText: b.anchorText,
       domainAuthority: b.da,
       type: b.type,
-      firstSeen: `2026-0${(seed % 6) + 3}-${((seed * 3) % 27) + 1}`,
+      firstSeen: `2026-${String((seed % 6) + 3).padStart(2, "0")}-${String(((seed * 3) % 27) + 1).padStart(2, "0")}`,
       status: statuses[seed % statuses.length],
     };
   });

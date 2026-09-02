@@ -6,9 +6,11 @@ a standalone product to sell as a subscription, separate from the `beacon-seo`
 Claude Code plugin.
 
 This repository is a **working Next.js application** with every screen from the
-product spec built and wired to a realistic mock data layer. It is not yet
-connected to live SEO data, a database, auth, or billing — that wiring is the
-next phase, and is mapped out below so it's a matter of swapping functions, not
+product spec built and wired to a realistic mock data layer, plus **real,
+working authentication** (register/login/logout), **multi-tenant organizations**,
+and a **platform admin panel** for managing subscriptions. The SEO data itself
+(projects, audits, keywords, backlinks) is still mock data — that wiring is the
+next phase, mapped out below so it's a matter of swapping functions, not
 redesigning pages.
 
 ## What's actually built right now
@@ -37,20 +39,60 @@ redesigning pages.
 - **Learn** — plain-English glossary of every metric the app surfaces.
 - **Help** — per-CMS (WordPress / Shopify / Webflow / custom) troubleshooting
   accordion.
+- **Auth** — `/register` creates a new Organization + owner user and signs
+  them in; `/login` signs back in; sign-out is in the Topbar's account menu.
+  Every app route (`/dashboard`, `/projects`, `/research`, `/agents`,
+  `/pricing`, `/learn`, `/help`, `/admin`) is behind auth — unauthenticated
+  visitors are redirected to `/login` and sent back after signing in.
+- **Platform admin** (`/admin`, visible only to accounts with
+  `isPlatformAdmin`) — lists every registered organization with its owner,
+  member count, plan, and status, and lets you change plan/status inline.
+  This is real, working CRUD against the database — it is **not** connected
+  to a payment processor, so changing a plan here is billing metadata only
+  and does not charge or refund anyone (see Stripe in "Not yet in this repo").
 
-Every page reads through `src/lib/mock-data.ts`. Nothing else references mock
-data directly, so connecting real data is a matter of replacing function
-bodies in that one file (or splitting it into real API calls) rather than
-touching every page.
+Every SEO data page reads through `src/lib/mock-data.ts`. Nothing else
+references mock data directly, so connecting real data is a matter of
+replacing function bodies in that one file (or splitting it into real API
+calls) rather than touching every page. Auth and organizations are **not**
+mock — they're real, backed by a small SQLite database (see below).
+
+## Auth & database
+
+Accounts, organizations, and subscription plan/status are stored in a local
+SQLite file via `better-sqlite3` (`src/lib/db.ts`) — deliberately not an ORM
+with a migration engine: Prisma's migration engine needs to download a native
+binary at build time, which isn't guaranteed to work on every host (shared
+hosting, sandboxed CI). `better-sqlite3` ships prebuilt binaries for common
+platforms and has zero external network calls at build or run time.
+
+If this product later needs Postgres (for horizontal scaling — SQLite is a
+single file, fine for one server, not for multiple instances sharing state),
+swap the implementation inside `src/lib/db.ts` — nothing outside that file
+talks to SQLite directly.
+
+Auth is NextAuth v5 (`next-auth@beta`) with a Credentials provider (email +
+bcrypt-hashed password), JWT sessions. Route protection is a `src/proxy.ts`
+file (Next.js 16's renamed `middleware.ts` — see
+[Renaming Middleware to Proxy](https://nextjs.org/docs/messages/middleware-to-proxy)),
+which runs in the Edge runtime and therefore cannot import `better-sqlite3` —
+that's why the NextAuth config is split into `src/auth.config.ts` (edge-safe:
+no providers, no DB import, used by `proxy.ts`) and `src/auth.ts` (full
+config with the Credentials provider, used everywhere else). If you add
+providers or callbacks, double-check which file they belong in.
 
 ## Local development
 
 ```bash
 npm install
+cp .env.example .env    # then fill in AUTH_SECRET (see comments in the file)
+npm run db:seed         # creates a platform-admin login + a demo customer login
 npm run dev
 ```
 
-Open http://localhost:3000 — it redirects to `/dashboard`.
+Open http://localhost:3000 — it redirects to `/dashboard`, which redirects to
+`/login` since you're not signed in yet. Sign in with the account
+`npm run db:seed` printed, or register a new one at `/register`.
 
 ```bash
 npm run build && npm run start   # production build
@@ -68,14 +110,26 @@ src/
     pricing/
     learn/
     help/
+    login/, register/      auth pages (server page.tsx + client *Form.tsx)
+    admin/                  platform admin panel + server actions
+    api/auth/[...nextauth]/ NextAuth route handler
   components/
-    layout/               Sidebar, Topbar, MobileNav, DashboardShell
+    layout/               Sidebar, Topbar, MobileNav, DashboardShell(Client)
     ui/                    Card, StatCard, Badge, ScoreGauge, Tabs
     charts/                TrendChart, RankDistributionChart, Sparkline
+    auth/                  AuthCard (shared login/register layout)
+    admin/                  AdminOrgRow (plan/status controls)
   lib/
     types.ts               every data shape the app uses
-    mock-data.ts            <- swap this out for real data sources
+    mock-data.ts            <- swap this out for real SEO data sources
+    db.ts                    real SQLite data layer (users, organizations)
+    auth-actions.ts          server actions: register, login, sign out
     utils.ts                formatters, class helpers
+  auth.ts                  full NextAuth config (Node runtime only)
+  auth.config.ts           edge-safe NextAuth config, shared with proxy.ts
+  proxy.ts                 route protection (Next 16's middleware.ts)
+scripts/
+  seed.ts                  creates platform-admin + demo customer accounts
 ```
 
 ## Connecting real data (next phase)
@@ -102,22 +156,51 @@ instead of a chat session.
 
 ### Not yet in this repo (needed before this is sellable)
 
-1. **Database** — Postgres via Prisma. Tables roughly: `Organization`, `User`,
-   `Project`, `AuditRun`, `Keyword`, `KeywordRanking` (time series),
-   `Competitor`, `Backlink`, `AgentRun`, `Subscription`.
-2. **Auth** — NextAuth (or Clerk/Auth.js) with an `Organization` scoping every
-   query, so one customer never sees another's data.
-3. **Job scheduler** — a queue (BullMQ + Redis, or a cron-triggered serverless
+1. **Real SEO data tables** — `Project`, `AuditRun`, `Keyword`,
+   `KeywordRanking` (time series), `Competitor`, `Backlink`, `AgentRun` all
+   still come from `src/lib/mock-data.ts`, not the database. The `User` and
+   `Organization` tables are real (`src/lib/db.ts`) — extend that same file,
+   or migrate to Postgres if you need horizontal scaling, and add the
+   `organizationId` scoping these new tables so one customer never queries
+   another's data. ~~Auth~~ ✅ done — NextAuth v5, see "Auth & database" above.
+2. **Job scheduler** — a queue (BullMQ + Redis, or a cron-triggered serverless
    function) to run audits/keyword refreshes on a schedule per plan tier.
-4. **Billing** — Stripe subscriptions matching the three plans on `/pricing`,
-   with usage limits (`projects`, `keywords`, `agentRuns` fields already
-   modeled in `PricingPlan`) enforced server-side.
-5. **API routes** for each DataForSEO/Google/LLM call, so API keys stay
+3. **Billing** — Stripe subscriptions matching the three plans on `/pricing`.
+   The `/admin` panel already lets you set an organization's plan and status
+   (trialing/active/suspended/canceled) as billing *metadata*, and
+   `PricingPlan` already models `projects`/`keywords`/`agentRuns` usage
+   limits — but nothing charges a card yet. Wire Stripe Checkout/Billing,
+   have its webhook call `updateOrganizationPlan`/`updateOrganizationStatus`
+   in `src/lib/db.ts` on `checkout.session.completed` /
+   `customer.subscription.updated` events, and enforce the usage limits
+   server-side.
+4. **API routes** for each DataForSEO/Google/LLM call, so API keys stay
    server-side and usage is metered per organization.
 
 ## Deployment
 
-This is a stock Next.js app — deploys to Vercel with zero configuration:
+**Required in every environment:** an `AUTH_SECRET` environment variable
+(generate one with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`
+— see `.env.example`). Without it, sign-in will fail or use an insecure
+default depending on the host.
+
+**SQLite persistence — read this before deploying to Hostinger or any host
+that deploys by uploading/replacing files (rather than a git pull on the
+server):** the database is a single file at `./data/app.db` by default. If a
+"redeploy" on your host re-uploads the app's files, it can silently wipe or
+replace that file, deleting every registered account. Point `DATABASE_PATH`
+(see `.env.example`) at a location *outside* the app's deploy directory —
+e.g. a persistent storage path your host doesn't touch on redeploy — and run
+`npm run db:seed` again after the very first deploy only. Confirm with your
+host which paths survive a redeploy before relying on this in production.
+
+Vercel (serverless) is the exception: its filesystem is ephemeral on every
+request, so a file-based SQLite database does **not** work there at all —
+either deploy to a host with a persistent filesystem (Hostinger's Node.js
+app, a VPS, Railway, Fly.io, Render), or swap `src/lib/db.ts` for a hosted
+database (Postgres, Turso/libSQL) before deploying to Vercel.
+
+This is otherwise a stock Next.js app:
 
 ```bash
 npm install -g vercel   # if you don't have it
@@ -125,12 +208,12 @@ vercel                  # first deploy, follow prompts
 vercel --prod            # production deploy
 ```
 
-Or connect the GitHub repo directly in the Vercel dashboard for automatic
-deploys on push. Once a database is added, set `DATABASE_URL` (and later
-`STRIPE_SECRET_KEY`, `DATAFORSEO_LOGIN`/`DATAFORSEO_PASSWORD`,
-`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, `NEXTAUTH_SECRET`, Google OAuth
-credentials) as environment variables in Vercel's project settings — never
-commit these to the repo.
+Or connect the GitHub repo directly in your host's dashboard for automatic
+deploys on push. Set `AUTH_SECRET` (required, see above) and, once real SEO
+data is wired in, `STRIPE_SECRET_KEY`, `DATAFORSEO_LOGIN`/`DATAFORSEO_PASSWORD`,
+`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, Google OAuth credentials — as
+environment variables in your host's project settings. Never commit these,
+or the `.env` file, to the repo.
 
 ## Naming
 

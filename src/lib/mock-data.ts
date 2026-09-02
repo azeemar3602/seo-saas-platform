@@ -302,6 +302,10 @@ const auditIssuePool: AuditIssue[] = [
 
 export function getAuditIssues(projectId: string): AuditIssue[] {
   const seed = projectId.length;
+  // Rotate the pool and vary affected-URL counts per project so audits aren't
+  // identical across sites, and drop the lowest-severity issue for sites with
+  // fewer overall problems (shorter project id = smaller/newer site, per the
+  // seeding convention used elsewhere in this file).
   const rotated = [
     ...auditIssuePool.slice(seed % auditIssuePool.length),
     ...auditIssuePool.slice(0, seed % auditIssuePool.length),

@@ -1,11 +1,11 @@
-"use client";
+import { auth } from "@/auth";
+import { DashboardShellClient } from "./DashboardShellClient";
 
-import { useState } from "react";
-import { Sidebar } from "./Sidebar";
-import { Topbar } from "./Topbar";
-import { MobileNav } from "./MobileNav";
-
-export function DashboardShell({
+// Server wrapper: fetches the session (auth() reads the JWT — no better-sqlite3
+// call here, safe in any Node runtime) and hands it down as plain props to the
+// client shell. Every existing page imports { DashboardShell } from this file
+// unchanged — only this file's internals changed to add real session data.
+export async function DashboardShell({
   title,
   subtitle,
   children,
@@ -14,16 +14,11 @@ export function DashboardShell({
   subtitle?: string;
   children: React.ReactNode;
 }) {
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const session = await auth();
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar />
-      <MobileNav open={mobileOpen} onClose={() => setMobileOpen(false)} />
-      <div className="flex-1 min-w-0 flex flex-col">
-        <Topbar title={title} subtitle={subtitle} onMenuClick={() => setMobileOpen(true)} />
-        <main className="flex-1 p-4 lg:p-8 max-w-[1400px] w-full mx-auto">{children}</main>
-      </div>
-    </div>
+    <DashboardShellClient title={title} subtitle={subtitle} user={session?.user}>
+      {children}
+    </DashboardShellClient>
   );
 }

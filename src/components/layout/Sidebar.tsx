@@ -11,6 +11,7 @@ import {
   BookOpen,
   LifeBuoy,
   Sparkles,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -27,7 +28,7 @@ const bottomNav = [
   { href: "/help", label: "Help", icon: LifeBuoy },
 ];
 
-export function Sidebar() {
+export function Sidebar({ isPlatformAdmin }: { isPlatformAdmin?: boolean }) {
   const pathname = usePathname();
 
   return (
@@ -62,6 +63,20 @@ export function Sidebar() {
       </nav>
 
       <div className="px-3 py-4 border-t border-border space-y-1">
+        {isPlatformAdmin ? (
+          <Link
+            href="/admin"
+            className={cn(
+              "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+              pathname.startsWith("/admin")
+                ? "bg-primary-soft text-primary"
+                : "text-muted hover:bg-surface-muted hover:text-foreground"
+            )}
+          >
+            <ShieldCheck className="w-[18px] h-[18px]" strokeWidth={2} />
+            Admin
+          </Link>
+        ) : null}
         {bottomNav.map((item) => {
           const active = pathname.startsWith(item.href);
           const Icon = item.icon;

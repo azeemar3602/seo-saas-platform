@@ -11,6 +11,7 @@ import {
   BookOpen,
   LifeBuoy,
   Sparkles,
+  ShieldCheck,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -25,8 +26,19 @@ const nav = [
   { href: "/help", label: "Help", icon: LifeBuoy },
 ];
 
-export function MobileNav({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function MobileNav({
+  open,
+  onClose,
+  isPlatformAdmin,
+}: {
+  open: boolean;
+  onClose: () => void;
+  isPlatformAdmin?: boolean;
+}) {
   const pathname = usePathname();
+  const items = isPlatformAdmin
+    ? [...nav, { href: "/admin", label: "Admin", icon: ShieldCheck }]
+    : nav;
 
   return (
     <div
@@ -54,7 +66,7 @@ export function MobileNav({ open, onClose }: { open: boolean; onClose: () => voi
           </button>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {nav.map((item) => {
+          {items.map((item) => {
             const active = pathname.startsWith(item.href);
             const Icon = item.icon;
             return (
